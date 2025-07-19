@@ -1,0 +1,1 @@
+Receipt(id, cart_id, created_at)
