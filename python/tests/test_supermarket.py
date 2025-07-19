@@ -1,32 +1,44 @@
 import pytest
-
+from approvaltests import verify
 from model_objects import Product, SpecialOfferType, ProductUnit
 from shopping_cart import ShoppingCart
 from teller import Teller
 from tests.fake_catalog import FakeCatalog
+from receipt_printer import ReceiptPrinter
 
+class TestSupermarket:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.catalog = FakeCatalog()
+        self.teller = Teller(self.catalog)
+        self.cart = ShoppingCart()
+        
+        # Add test products
+        self.toothbrush = Product("toothbrush", ProductUnit.EACH)
+        self.catalog.add_product(self.toothbrush, 0.99)
+        self.apples = Product("apples", ProductUnit.KILO)
+        self.catalog.add_product(self.apples, 1.99)
+        self.rice = Product("rice", ProductUnit.EACH)
+        self.catalog.add_product(self.rice, 2.49)
 
-def test_ten_percent_discount():
-    catalog = FakeCatalog()
-    toothbrush = Product("toothbrush", ProductUnit.EACH)
-    catalog.add_product(toothbrush, 0.99)
+    def test_empty_cart(self):
+        receipt = self.teller.checks_out_articles_from(self.cart)
+        verify(ReceiptPrinter(40).print_receipt(receipt))
 
-    apples = Product("apples", ProductUnit.KILO)
-    catalog.add_product(apples, 1.99)
+    def test_two_normal_items(self):
+        self.cart.add_item(self.toothbrush)
+        self.cart.add_item(self.rice)
+        receipt = self.teller.checks_out_articles_from(self.cart)
+        verify(ReceiptPrinter(40).print_receipt(receipt))
 
-    teller = Teller(catalog)
-    teller.add_special_offer(SpecialOfferType.TEN_PERCENT_DISCOUNT, toothbrush, 10.0)
-
-    cart = ShoppingCart()
-    cart.add_item_quantity(apples, 2.5)
-
-    receipt = teller.checks_out_articles_from(cart)
-
-    assert 4.975 == pytest.approx(receipt.total_price(), 0.01)
-    assert [] == receipt.discounts
-    assert 1 == len(receipt.items)
-    receipt_item = receipt.items[0]
-    assert apples == receipt_item.product
-    assert 1.99 == receipt_item.price
-    assert 2.5 * 1.99 == pytest.approx(receipt_item.total_price, 0.01)
-    assert 2.5 == receipt_item.quantity
+    def test_buy_two_get_one_free(self):
+        self.cart.add_item(self.toothbrush)
+        self.cart.add_item(self.toothbrush)
+        self.cart.add_item(self.toothbrush)
+        self.teller.add_special_offer(
+            SpecialOfferType.THREE_FOR_TWO,
+            self.toothbrush,
+            self.catalog.unit_price(self.toothbrush)
+        )
+        receipt = self.teller.checks_out_articles_from(self.cart)
+        verify(ReceiptPrinter(40).print_receipt(receipt))
